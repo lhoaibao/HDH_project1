@@ -2,24 +2,36 @@
 #include <unistd.h>
 #include <string.h>
 #define MAX_LINE 80
+#define CLEAR "\e[1;1H\e[2J"
 
-void get_input(char input_buffer[MAX_LINE], char *args)
+void clrscr() // Clear the Screen
 {
-    scanf("%s", input_buffer);
-    int command_length = strlen(input_buffer);
+    printf("%s", CLEAR);
 }
 
-int main()
+void read_input(char *inputBuffer, int length)
 {
+    read(STDIN_FILENO, inputBuffer, MAX_LINE);
+}
+
+void loop()
+{
+    clrscr();
     char inputBuffer[MAX_LINE];
     char *args[MAX_LINE / 2 + 1];
     int should_run = 1;
     while (should_run)
     {
+        strcpy(inputBuffer, "\0");
         printf("osh> ");
         fflush(stdout);
-        get_input(inputBuffer, *args);
+        read_input(inputBuffer, MAX_LINE);
         fflush(stdin);
     }
+}
+
+int main()
+{
+    loop();
     return 0;
 }
