@@ -1,7 +1,6 @@
-total 32
--rwxr-xr-x 1 lehoaibao lehoaibao   304 Oct 17 12:59 a
--rwxr-xr-x 1 lehoaibao lehoaibao 13392 Oct 17 13:00 a.out
--rw-r--r-- 1 lehoaibao lehoaibao  3269 Oct 17 13:00 index.c
+total 36
+-rwxr-xr-x 1 lehoaibao lehoaibao   304 Oct 17 13:57 a
+-rwxr-xr-x 1 lehoaibao lehoaibao 13392 Oct 17 13:57 a.out
+-rw-r--r-- 1 lehoaibao lehoaibao  4123 Oct 17 13:57 index.c
 -rw-r--r-- 1 lehoaibao lehoaibao    35 Oct 17 11:58 Makefile
 -rw-r--r-- 1 lehoaibao lehoaibao    14 Oct  7 12:18 README.md
-osh> 

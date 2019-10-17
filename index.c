@@ -39,9 +39,10 @@ int shell_executable(char *args[])
 {
     __pid_t pid;
     pid = fork();
+    int status;
     if (pid == 0)
     {
-        execvp(args[0], args);
+        status = execvp(args[0], args);
     }
     else if (pid > 0)
     {
@@ -51,7 +52,7 @@ int shell_executable(char *args[])
     {
         perror("could not fork");
     }
-    return 1;
+    return status;
 }
 
 void set_history(char *history, char *inputBuffer)
@@ -83,45 +84,67 @@ int redirect_check(char *input)
 
 int redirect(char *args[], int state)
 {
-    char *command[MAX_LINE/2 +1];
+    char *command[MAX_LINE / 2 + 1];
     char *file;
-    int pos = 0,ret;
+    int pos = 0, ret;
     int fd;
-    if (state == 2)
+    __pid_t pid;
+    pid = fork();
+    if (pid == 0)
     {
-        while (args[pos] != NULL)
+        if (state == 2)
         {
-            if (strcmp(args[pos], ">") == 0)
+            while (args[pos] != NULL)
             {
-                break;
+                if (strcmp(args[pos], ">") == 0)
+                {
+                    break;
+                }
+                command[pos] = args[pos];
+                pos++;
             }
-            command[pos] = args[pos];
-            pos++;
+            command[pos] = NULL;
+            file = args[pos + 1];
+            fd = open(file, O_CREAT | O_WRONLY, 0777);
+            ret = dup2(fd, 1);
+            execvp(command[0], command);
+            close(1);
+            close(fd);
         }
-        command[pos] = NULL;
-        file = args[pos + 1];
-        fd = open(file, O_CREAT | O_WRONLY,0777);
-        ret = dup2(fd,1);
-        shell_executable(command);
-        close(1);
-        close(fd);
-    }
 
-    if (state == 1)
-    {
-        file = args[pos];
-        pos+=2;
-        while (args[pos] != NULL)
+        if (state == 1)
         {
-            command[pos] = args[pos];
-            pos++;
+            while (args[pos] != NULL)
+            {
+                if (strcmp(args[pos], "<") == 0)
+                {
+                    break;
+                }
+                command[pos] = args[pos];
+                pos++;
+            }
+            command[pos] = NULL;
+            file = args[pos + 1];
+            fd = open(file, O_RDONLY);
+            ret = dup2(fd, 0);
+            close(fd);
+            execvp(command[0], command);
+            close(0);
         }
-        fd = open(file, O_RDONLY);
-        ret = dup2(fd,0);
-        shell_executable(command);
-        close(0);
-        close(fd);
+        if (state == 3)
+        {
+            printf("we dont develop this feature\n");
+        }
     }
+    else if (pid > 0)
+    {
+        wait(NULL);
+    }
+    else
+    {
+        perror("could not fork");
+    }
+    return 0;
 }
 
 void shell_loop()
@@ -131,9 +154,10 @@ void shell_loop()
     char *args[MAX_LINE / 2 + 1];
     int should_run = 1;
     char history[MAX_LINE];
-    int status_redirect = 0;
+    int status_redirect = 0, execute_status=0;
     do
     {
+        execute_status=0;
         printf("osh> ");
         shell_read_input(inputBuffer);
         if (strcmp(inputBuffer, "!!") == 0)
@@ -146,17 +170,27 @@ void shell_loop()
             strcpy(inputBuffer, history);
             printf("%s\n", inputBuffer);
         }
+        set_history(history, inputBuffer);
         status_redirect = redirect_check(inputBuffer);
         shell_get_command(args, inputBuffer);
+
+        if (strcmp(args[0], "exit") == 0)
+        {
+            should_run = 0;
+            continue;
+        }
         if (status_redirect)
         {
             redirect(args, status_redirect);
-            }
+        }
         else
         {
-            should_run = shell_executable(args);
+            execute_status = shell_executable(args);
         }
-        set_history(history, inputBuffer);
+
+        if (execute_status==-1){
+            printf("command not found\n");
+        }
     } while (should_run);
 }
 
