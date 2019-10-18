@@ -147,6 +147,65 @@ int redirect(char *args[], int state)
     return 0;
 }
 
+int check_pipe(char *input)
+{
+    char *pipe = strpbrk(input, "|");
+    if (pipe != NULL)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+void pipe_feature(char *args[])
+{
+    int pipefd[2], status;
+    __pid_t pid, pid1;
+    char **command1, **command2;
+    int index = 0, i = 0;
+    while (strcmp(args[index], "|") == 0)
+    {
+        command1[i] = args[index];
+        index++;
+        i++;
+    }
+    command1[i] = NULL;
+    index++;
+    i = 0;
+    while (args[index] != NULL)
+    {
+        command2[i] = args[index];
+        index++;
+        i++;
+    }
+    command2[i] = NULL;
+    pipe(pipefd);
+    pid1 = fork();
+    if (pid1 == 0)
+    {
+        pid = fork();
+        if (pid)
+        {
+            wait(&pipefd[1]);
+            dup2(pipefd[0], 0);
+            close(pipefd[0]);
+            close(pipefd[1]);
+            execvp(command2[0], command2);
+        }
+        if (pid == 0)
+        {
+            dup2(pipefd[1], 1);
+            close(pipefd[0]);
+            close(pipefd[1]);
+            execvp(command1[0], command1);
+        }
+    }
+    else
+    {
+        wait(NULL);
+    }
+}
+
 void shell_loop()
 {
     clrscr();
@@ -154,10 +213,10 @@ void shell_loop()
     char *args[MAX_LINE / 2 + 1];
     int should_run = 1;
     char history[MAX_LINE];
-    int status_redirect = 0, execute_status=0;
+    int status_redirect = 0, execute_status = 0, status_pipe = 0;
     do
     {
-        execute_status=0;
+        execute_status = 0;
         printf("osh> ");
         shell_read_input(inputBuffer);
         if (strcmp(inputBuffer, "!!") == 0)
@@ -172,6 +231,7 @@ void shell_loop()
         }
         set_history(history, inputBuffer);
         status_redirect = redirect_check(inputBuffer);
+        status_pipe = check_pipe(inputBuffer);
         shell_get_command(args, inputBuffer);
 
         if (strcmp(args[0], "exit") == 0)
@@ -179,7 +239,11 @@ void shell_loop()
             should_run = 0;
             continue;
         }
-        if (status_redirect)
+        else if (status_pipe)
+        {
+            pipe_feature(args);
+        }
+        else if (status_redirect)
         {
             redirect(args, status_redirect);
         }
@@ -188,7 +252,8 @@ void shell_loop()
             execute_status = shell_executable(args);
         }
 
-        if (execute_status==-1){
+        if (execute_status == -1)
+        {
             printf("command not found\n");
         }
     } while (should_run);
