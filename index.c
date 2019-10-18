@@ -294,11 +294,11 @@ void shell_loop()
     {
         // check posible feature
         execute_status = 0;
-        status_redirect = redirect_check(inputBuffer);
-        status_pipe = check_pipe(inputBuffer);
 
         printf("osh> ");
         shell_read_input(inputBuffer);
+        status_redirect = redirect_check(inputBuffer);
+        status_pipe = check_pipe(inputBuffer);
 
         // check and using history after that set a new history
         history_feature(inputBuffer, history);
@@ -333,7 +333,7 @@ void shell_loop()
         }
 
         if (status_redirect)
-        {
+        {  
             redirect(args, status_redirect);
             continue;
         }
