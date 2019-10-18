@@ -21,7 +21,7 @@ void shell_read_input(char *buffer)
     buffer[length - 1] = '\0';
 }
 
-void shell_get_command(char *args[], char *input)
+int shell_get_command(char *args[], char *input)
 {
     char *parsed;
     int index = 0;
@@ -33,6 +33,7 @@ void shell_get_command(char *args[], char *input)
         parsed = strtok(NULL, " ");
     }
     args[index] = NULL;
+    return index - 1;
 }
 
 int shell_executable(char *args[])
@@ -42,7 +43,10 @@ int shell_executable(char *args[])
     int status;
     if (pid == 0)
     {
-        status = execvp(args[0], args);
+        if (execvp(args[0], args) == -1)
+        {
+            printf("%s: command not found\n", args[0]);
+        }
     }
     else if (pid > 0)
     {
@@ -62,8 +66,8 @@ void set_history(char *history, char *inputBuffer)
 
 int redirect_check(char *input)
 {
-    char *out = strpbrk(input, ">");
-    char *in = strpbrk(input, "<");
+    char *out = strstr(input, ">");
+    char *in = strstr(input, "<");
     if ((out != NULL) && (in != NULL))
     {
         //both inut and output redirection
@@ -80,6 +84,15 @@ int redirect_check(char *input)
         return 1;
     }
     return 0;
+}
+
+int check_ampersand_end(char *args[], int n)
+{
+    if (strcmp(args[n], "&") == 0)
+    {
+        args[n] = NULL;
+        return n - 1;
+    }
 }
 
 int redirect(char *args[], int state)
@@ -105,6 +118,7 @@ int redirect(char *args[], int state)
             }
             command[pos] = NULL;
             file = args[pos + 1];
+            remove(file);
             fd = open(file, O_CREAT | O_WRONLY, 0777);
             ret = dup2(fd, 1);
             execvp(command[0], command);
@@ -147,9 +161,10 @@ int redirect(char *args[], int state)
     return 0;
 }
 
+// function check if command have | or not
 int check_pipe(char *input)
 {
-    char *pipe = strpbrk(input, "|");
+    char *pipe = strstr(input, "|");
     if (pipe != NULL)
     {
         return 1;
@@ -157,14 +172,19 @@ int check_pipe(char *input)
     return 0;
 }
 
-void pipe_feature(char *args[])
+void pipe_feature(char *args[], int n)
 {
     int pipefd[2], status;
     __pid_t pid, pid1;
-    char **command1, **command2;
+    char *command1[20];
+    char *command2[20];
     int index = 0, i = 0;
-    while (strcmp(args[index], "|") == 0)
+    while (1)
     {
+        if (strcmp(args[index], "|") == 0)
+        {
+            break;
+        }
         command1[i] = args[index];
         index++;
         i++;
@@ -172,90 +192,152 @@ void pipe_feature(char *args[])
     command1[i] = NULL;
     index++;
     i = 0;
-    while (args[index] != NULL)
+    while (index <= n)
     {
         command2[i] = args[index];
         index++;
         i++;
     }
     command2[i] = NULL;
-    pipe(pipefd);
-    pid1 = fork();
-    if (pid1 == 0)
+    pid = fork();
+    if (pid == 0)
     {
-        pid = fork();
-        if (pid)
+        pipe(pipefd);
+        pid1 = fork();
+        if (pid1 == 0)
         {
-            wait(&pipefd[1]);
-            dup2(pipefd[0], 0);
             close(pipefd[0]);
+            dup2(pipefd[1], STDOUT_FILENO);
             close(pipefd[1]);
-            execvp(command2[0], command2);
+            if (execvp(command1[0], command1) == -1)
+            {
+                exit(1);
+            }
         }
-        if (pid == 0)
+        else if (pid1 > 0)
         {
-            dup2(pipefd[1], 1);
-            close(pipefd[0]);
+            wait(NULL);
             close(pipefd[1]);
-            execvp(command1[0], command1);
+            dup2(pipefd[0], STDIN_FILENO);
+
+            close(pipefd[0]);
+            if (execvp(command2[0], command2) == -1)
+            {
+                exit(1);
+            }
         }
+        else
+        {
+            perror("could not fork");
+        }
+    }
+    else if (pid > 0)
+    {
+        wait(NULL);
     }
     else
     {
-        wait(NULL);
+        perror("could not fork");
+    }
+}
+
+// cd command in terminal
+void build_in_cd(char *args[])
+{
+    if (args[2] != NULL)
+    {
+        printf("cd: too many arguments\n");
+        return;
+    }
+    if (chdir(args[1]) != -1)
+    {
+        return;
+    }
+    printf("cd: %s: No such file or directory\n", args[1]);
+}
+
+// pwd command in terminal
+void build_in_pwd(char *args[])
+{
+    char cwd[100];
+    getcwd(cwd, sizeof(cwd));
+    printf("%s\n", cwd);
+    return;
+}
+
+// history feature
+void history_feature(char *inputBuffer, char *history)
+{
+    if (strcmp(inputBuffer, "!!") == 0)
+    {
+        if (strlen(history) == 0)
+        {
+            printf("history is empty\n");
+            return;
+        }
+        strcpy(inputBuffer, history);
+        printf("%s\n", inputBuffer);
     }
 }
 
 void shell_loop()
 {
+    // clear screen for beauty ^^
     clrscr();
+
     char inputBuffer[MAX_LINE];
     char *args[MAX_LINE / 2 + 1];
     int should_run = 1;
     char history[MAX_LINE];
-    int status_redirect = 0, execute_status = 0, status_pipe = 0;
+    int status_redirect = 0, execute_status, status_pipe = 0;
     do
     {
+        // check posible feature
         execute_status = 0;
-        printf("osh> ");
-        shell_read_input(inputBuffer);
-        if (strcmp(inputBuffer, "!!") == 0)
-        {
-            if (strlen(history) == 0)
-            {
-                printf("history is empty\n");
-                continue;
-            }
-            strcpy(inputBuffer, history);
-            printf("%s\n", inputBuffer);
-        }
-        set_history(history, inputBuffer);
         status_redirect = redirect_check(inputBuffer);
         status_pipe = check_pipe(inputBuffer);
-        shell_get_command(args, inputBuffer);
+
+        printf("osh> ");
+        shell_read_input(inputBuffer);
+
+        // check and using history after that set a new history
+        history_feature(inputBuffer, history);
+        set_history(history, inputBuffer);
+
+        // split input into list command
+        int n = shell_get_command(args, inputBuffer);
+        n = check_ampersand_end(args, n);
 
         if (strcmp(args[0], "exit") == 0)
         {
             should_run = 0;
             continue;
         }
-        else if (status_pipe)
+
+        if (strcmp(args[0], "pwd") == 0)
         {
-            pipe_feature(args);
-        }
-        else if (status_redirect)
-        {
-            redirect(args, status_redirect);
-        }
-        else
-        {
-            execute_status = shell_executable(args);
+            build_in_pwd(args);
+            continue;
         }
 
-        if (execute_status == -1)
+        if (strcmp(args[0], "cd") == 0)
         {
-            printf("command not found\n");
+            build_in_cd(args);
+            continue;
         }
+
+        if (status_pipe)
+        {
+            pipe_feature(args, n);
+            continue;
+        }
+
+        if (status_redirect)
+        {
+            redirect(args, status_redirect);
+            continue;
+        }
+        shell_executable(args);
     } while (should_run);
 }
 
