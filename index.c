@@ -93,6 +93,7 @@ int check_ampersand_end(char *args[], int n)
         args[n] = NULL;
         return n - 1;
     }
+    return n;
 }
 
 int redirect(char *args[], int state)
@@ -297,12 +298,13 @@ void shell_loop()
 
         printf("osh> ");
         shell_read_input(inputBuffer);
-        status_redirect = redirect_check(inputBuffer);
-        status_pipe = check_pipe(inputBuffer);
 
         // check and using history after that set a new history
         history_feature(inputBuffer, history);
         set_history(history, inputBuffer);
+
+        status_redirect = redirect_check(inputBuffer);
+        status_pipe = check_pipe(inputBuffer);
 
         // split input into list command
         int n = shell_get_command(args, inputBuffer);
